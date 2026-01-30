@@ -3,11 +3,8 @@ addEventListener('fetch', event => {
 })
 
 const CONFIG = { KV_TTL: 3600 }
+
 async function handleRequest(request) {
-  const country = request.cf?.country;
-  if (country && country !== 'CN') {
-    return new Response('Access Denied', { status: 403 });
-  }
   const url = new URL(request.url)
   const path = url.pathname
 
@@ -119,10 +116,38 @@ async function handleNotify(request, url) {
       await new Promise(resolve => setTimeout(resolve, 30000));
     }
 
-    const barkApiUrl = `${BARK_URL}/挪车请求/${encodeURIComponent(notifyBody)}?group=MoveCar&level=critical&call=1&sound=minuet&icon=https://cdn-icons-png.flaticon.com/512/741/741407.png&url=${confirmUrl}`;
+  // ========== 替换为 Gotify API 核心逻辑 ==========
+    // Gotify 配置（需提前设置环境变量）
+    // GOTIFY_URL: Gotify 服务器地址（如 https://gotify.example.com）
+    // GOTIFY_TOKEN: Gotify 应用令牌
+    const gotifyApiUrl = `${GOTIFY_URL}/message?token=${GOTIFY_TOKEN}`;
+    // 构造 Gotify 推送参数（保留原 Bark 的所有信息维度）
+    const gotifyPayload = {
+      title: '挪车请求',          // 推送标题（对应原 Bark 的一级路径）
+      message: notifyBody.replace(/\\n/g, '\n'), // 推送内容（还原换行符，适配 Gotify 格式）
+      priority: 8,               // 高优先级（对应原 Bark 的 level=critical）
+      extras: {
+        "client::display": {
+          "contentType": "text/markdown" // 支持 markdown 格式
+        },
+        "client::notification": {
+          "sound": "minuet",      // 保留原声音配置（需 Gotify 客户端支持）
+          "clickUrl": decodeURIComponent(confirmUrl) // 点击跳转链接
+        }
+      }
+    };
 
-    const barkResponse = await fetch(barkApiUrl);
-    if (!barkResponse.ok) throw new Error('Bark API Error');
+    // 发送 Gotify POST 请求
+    const gotifyResponse = await fetch(gotifyApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(gotifyPayload)
+    });
+
+    if (!gotifyResponse.ok) throw new Error('Gotify API Error');
+    // ========== Gotify API 替换结束 ==========
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { 'Content-Type': 'application/json' }
